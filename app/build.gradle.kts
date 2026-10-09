@@ -11,8 +11,8 @@ android {
         applicationId = "dev.eduarddragu.anotherreminderapp"
         minSdk = 34
         targetSdk = 37
-        versionCode = 27
-        versionName = "1.0.0"
+        versionCode = 28
+        versionName = "1.0.1"
     }
 
     // The same personal key as the habit tracker (aht.* in ~/.gradle/gradle.properties). Without it,
