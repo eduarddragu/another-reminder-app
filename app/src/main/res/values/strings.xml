@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">(Another) Reminder App</string>
+    <!-- Used in the home greeting ("Don't forget, Eduard."), as in the habit tracker. -->
+    <string name="owner_name" translatable="false">Eduard</string>
+</resources>

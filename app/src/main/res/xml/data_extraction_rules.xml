@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- data.json holds the spots of every place (home, work): it stays out of the Google account backup and
+     moves only with a device-to-device transfer. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="." />
+        <exclude domain="sharedpref" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="data.json" />
+    </device-transfer>
+</data-extraction-rules>
