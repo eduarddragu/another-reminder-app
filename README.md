@@ -4,12 +4,8 @@
 </picture>
 
 <p>
-  <img alt="Kotlin" src="https://img.shields.io/badge/kotlin-2.4-1a1714?style=flat-square&labelColor=b04619&logo=kotlin&logoColor=white">
-  <img alt="Jetpack Compose" src="https://img.shields.io/badge/ui-Jetpack%20Compose-1a1714?style=flat-square&labelColor=b04619&logo=jetpackcompose&logoColor=white">
-  <img alt="Android 14+" src="https://img.shields.io/badge/android-14%2B-1a1714?style=flat-square&labelColor=b04619&logo=android&logoColor=white">
-  <img alt="No accounts, no analytics" src="https://img.shields.io/badge/accounts-none-1a1714?style=flat-square&labelColor=b04619">
-  <img alt="License: GPL v3" src="https://img.shields.io/badge/license-GPL%20v3-1a1714?style=flat-square&labelColor=b04619">
-  <a href="https://eduarddragu.dev"><img alt="By eduarddragu.dev" src="https://img.shields.io/badge/by-eduarddragu.dev-1a1714?style=flat-square&labelColor=b04619"></a>
+  <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/badges-dark.svg"><img alt="Kotlin 2.4 · UI: Jetpack Compose · Android 14+ · Accounts: none · License: GPL v3" src="docs/assets/badges-light.svg"></picture>
+  <a href="https://eduarddragu.dev"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/badge-by-dark.svg"><img alt="By eduarddragu.dev" src="docs/assets/badge-by-light.svg"></picture></a>
 </p>
 
 **(Another) reminder app, built for me: it knows when I'm at the shop, keeps one list per place, and remembers the car tax every June, a week ahead.**
