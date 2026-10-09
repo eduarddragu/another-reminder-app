@@ -1,0 +1,16 @@
+*.iml
+.gradle
+.kotlin
+local.properties
+/.idea
+.DS_Store
+/build
+/app/build
+/captures
+
+# Signing material never lives in the repo
+*.jks
+*.keystore
+*.p12
+*.pk8
+*.pem
