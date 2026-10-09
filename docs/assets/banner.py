@@ -50,17 +50,18 @@ def font_style(*keys):
 
 def badges(name, t, items, file):
     """A row of badges in the app's labels: the key on the accent, the value on the card colour."""
-    h, pad, char, gap = 28, 10, 8.4, 8
+    # Small enough for the whole row, "by" included, to fit the README column on one line.
+    h, pad, char, gap, size = 22, 7, 7.0, 6, 10
     x, parts = 0, []
     for key, value in items:
         kw = len(key) * char + 2 * pad
         vw = len(value) * char + 2 * pad if value else 0
         w = kw + vw
-        parts.append(f'<rect x="{x + 0.5}" y="0.5" width="{w - 1}" height="{h - 1}" rx="7" fill="{t["cell"]}" stroke="{t["border"]}"/>')
-        parts.append(f'<path d="M{x + 7},0.5 H{x + kw} V{h - 0.5} H{x + 7} A6.5,6.5 0 0 1 {x + 0.5},{h - 7} V7 A6.5,6.5 0 0 1 {x + 7},0.5 Z" fill="{t["accent"]}"/>' if vw else f'<rect x="{x + 0.5}" y="0.5" width="{w - 1}" height="{h - 1}" rx="7" fill="{t["accent"]}"/>')
-        parts.append(f'<text x="{x + pad}" y="18.5" font-family="{MONO}" font-size="12" letter-spacing="1.2" fill="{t["bg"]}">{key}</text>')
+        parts.append(f'<rect x="{x + 0.5}" y="0.5" width="{w - 1}" height="{h - 1}" rx="6" fill="{t["cell"]}" stroke="{t["border"]}"/>')
+        parts.append(f'<path d="M{x + 6},0.5 H{x + kw} V{h - 0.5} H{x + 6} A5.5,5.5 0 0 1 {x + 0.5},{h - 6} V6 A5.5,5.5 0 0 1 {x + 6},0.5 Z" fill="{t["accent"]}"/>' if vw else f'<rect x="{x + 0.5}" y="0.5" width="{w - 1}" height="{h - 1}" rx="6" fill="{t["accent"]}"/>')
+        parts.append(f'<text x="{x + pad}" y="15" font-family="{MONO}" font-size="{size}" letter-spacing="1" fill="{t["bg"]}">{key}</text>')
         if vw:
-            parts.append(f'<text x="{x + kw + pad}" y="18.5" font-family="{MONO}" font-size="12" letter-spacing="1.2" fill="{t["fg"]}">{value}</text>')
+            parts.append(f'<text x="{x + kw + pad}" y="15" font-family="{MONO}" font-size="{size}" letter-spacing="1" fill="{t["fg"]}">{value}</text>')
         x += w + gap
     width = x - gap
     svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{h}" viewBox="0 0 {width:.0f} {h}" role="img" aria-label="{", ".join(" ".join(filter(None, i)) for i in items)}">{font_style("mono")}{"".join(parts)}</svg>\n'
