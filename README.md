@@ -31,13 +31,7 @@ Light and dark, both native. The light ones are here.
 
 **One list per shop.** A place is a kind of shop, not an address: "Esselunga" is every Esselunga I go to. Everything I need there is one list on one card. I tick things off one by one or all at once, tap a line to change it, and "Add" a new one right there, one per Enter, like a shopping list.
 
-**Notices I'm there.** After two minutes inside a shop, one notification lists everything I need there. Driving past doesn't count. It sounds kind, not bossy: "Nice timing. At Esselunga you meant to:".
-
-| Radius | For |
-|---|---|
-| 100 m | a shop in a street, without going off next door |
-| 150 m | the default |
-| 300 m | a mall and its car park |
+**Notices I'm there.** Within 300 m of a shop, the car park included, one notification lists everything I need there. It sounds kind, not bossy: "Nice timing. At Esselunga you meant to:".
 
 **Finds the shops.** I search a shop or an address ("Esselunga viale Piave"), nearest first. Or I tap "Where I am" while I'm there, share the shop from Google Maps, or paste a Maps link.
 
@@ -59,7 +53,7 @@ Nothing between 22:00 and 08:00. Done from the notification can be undone for te
 
 - Kotlin, Jetpack Compose and Material 3, in the palette and type of [eduarddragu.dev](https://eduarddragu.dev): Cormorant Garamond, DM Sans and Geist Mono, bundled under the SIL Open Font License (`app/src/main/assets/licenses/`).
 - One JSON file in the app's storage. No database.
-- Shops are Play services geofences, registered again only when needed (after a reboot, an update, or location coming back on), so opening the app never resets the two minutes.
+- Shops are Play services geofences, registered again only when needed (after a reboot, an update, or location coming back on), so opening the app at the shop never swallows the visit.
 - Dates are exact alarms on the phone, set again after a reboot, an update or a time zone change.
 - The maps are OpenStreetMap tiles, toned to the palette.
 - The logic that matters (repeats, the notification sequence, countdowns, Maps links, search results) is plain Kotlin with unit tests.

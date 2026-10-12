@@ -31,14 +31,16 @@ object Alarms {
   /**
    * Geofences go away when location is turned off and nothing tells the app when it comes back
    * (PROVIDERS_CHANGED isn't delivered to manifest receivers), so every hour it looks, and registers them
-   * again only when location went from off to on.
+   * again only when location went from off to on. True when it had to be set: the app's alarms were all
+   * gone (first run, a reboot, a force stop).
    */
-  fun scheduleResync(context: Context) {
+  fun scheduleResync(context: Context): Boolean {
     val resync = Intent(context, SystemReceiver::class.java).setAction(SystemReceiver.ACTION_RESYNC)
     // Set once: setting it again on every process start would push the first check back each time.
-    if (PendingIntent.getBroadcast(context, 0, resync, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE) != null) return
+    if (PendingIntent.getBroadcast(context, 0, resync, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE) != null) return false
     val intent = PendingIntent.getBroadcast(context, 0, resync, PendingIntent.FLAG_IMMUTABLE)
     context.getSystemService(AlarmManager::class.java).setInexactRepeating(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + AlarmManager.INTERVAL_HOUR, AlarmManager.INTERVAL_HOUR, intent)
+    return true
   }
 
   /** [nudge] with the reminder's time it was planned for: an edit since then makes the alarm stale. */
@@ -70,7 +72,7 @@ class AlarmReceiver : BroadcastReceiver() {
     Notifications.show(context, reminder, title, reminder.repeat?.let(Copy::repeatLabel))
     val fired = reminder.fired || nudge.kind == Nudges.Kind.DUE || nudge.kind == Nudges.Kind.LATE
     // Saving moves the alarm on to the next notification of the sequence.
-    Store.update(context) { it.upsert(reminder.copy(fired = fired, lastNudge = System.currentTimeMillis())) }
+    Store.update(context) { it.upsert(reminder.copy(fired = fired, lastNudge = nudge.at)) }
   }
 }
 

@@ -72,7 +72,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -200,13 +199,13 @@ fun PlacesScreen(data: Data, onOpen: (Int?) -> Unit) {
               Row(verticalAlignment = Alignment.CenterVertically) {
                 LineIcon(R.drawable.ic_pin)
                 Spacer(Modifier.width(10.dp))
-                CardLabel(lead = listOf(spots(place.spots.size).uppercase(), "${place.radius} M"), state = if (waiting > 0) (if (waiting == 1) "1 REMINDER" else "$waiting REMINDERS") else null, maxLines = 1)
+                CardLabel(lead = listOf(spots(place.spots.size).uppercase()), state = if (waiting > 0) (if (waiting == 1) "1 REMINDER" else "$waiting REMINDERS") else null, maxLines = 1)
               }
               Spacer(Modifier.height(10.dp))
               Text(place.name, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(12.dp))
-            SpotMap(place.spots, place.radius, Modifier.size(72.dp).clip(MaterialTheme.shapes.medium))
+            SpotMap(place.spots, Modifier.size(72.dp).clip(MaterialTheme.shapes.medium))
           }
         }
       }
@@ -248,7 +247,6 @@ fun PlaceEditor(data: Data, id: Int?, incoming: MapsShare?, onIncomingConsumed: 
   val existing = id?.let(data::place)
   var name by rememberSaveable { mutableStateOf(existing?.name.orEmpty()) }
   var spots by rememberSaveable(stateSaver = SpotsSaver) { mutableStateOf(existing?.spots.orEmpty()) }
-  var radius by rememberSaveable { mutableStateOf(existing?.radius ?: Place.DEFAULT_RADIUS) }
   // The search follows the name until it's edited: "Esselunga Lorenteggio" is typed once.
   var query by rememberSaveable { mutableStateOf("") }
   var queryEdited by rememberSaveable { mutableStateOf(false) }
@@ -262,7 +260,7 @@ fun PlaceEditor(data: Data, id: Int?, incoming: MapsShare?, onIncomingConsumed: 
   var saved by remember { mutableStateOf(false) }
   val waiting = existing?.let { p -> data.reminders.count { it.placeId == p.id } } ?: 0
   // Positions, not labels: a label filled in on its own isn't a change to confirm.
-  val dirty = name != existing?.name.orEmpty() || spots.map { it.lat to it.lng } != existing?.spots.orEmpty().map { it.lat to it.lng } || radius != (existing?.radius ?: Place.DEFAULT_RADIUS)
+  val dirty = name != existing?.name.orEmpty() || spots.map { it.lat to it.lng } != existing?.spots.orEmpty().map { it.lat to it.lng }
   // On a place that has its spots, finding another stays folded behind "Add another spot" until wanted.
   var findOpen by rememberSaveable { mutableStateOf(existing == null || existing.spots.isEmpty()) }
   BackHandler(dirty && !saved) { confirmDiscard = true }
@@ -466,7 +464,7 @@ fun PlaceEditor(data: Data, id: Int?, incoming: MapsShare?, onIncomingConsumed: 
       Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow, contentColor = MaterialTheme.colorScheme.onSurface)) {
         // The place as it sits on the ground: every spot inside its radius.
         Box(Modifier.fillMaxWidth().height(168.dp)) {
-          SpotMap(spots, radius, Modifier.fillMaxSize())
+          SpotMap(spots, Modifier.fillMaxSize())
           OsmCredit(Modifier.align(Alignment.BottomEnd).padding(horizontal = 16.dp, vertical = 10.dp))
         }
         Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp).animateContentSize(tween(Motion.LIST, easing = Motion.EaseUi))) {
@@ -489,13 +487,6 @@ fun PlaceEditor(data: Data, id: Int?, incoming: MapsShare?, onIncomingConsumed: 
           if (existing != null && !findOpen) TextAction("Add another spot", { findOpen = true }, Modifier.padding(top = 4.dp, bottom = 8.dp), vertical = 0.dp, icon = R.drawable.ic_plus)
         }
       }
-      SectionLabel("Radius", Modifier.padding(top = 16.dp))
-      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Place.RADII.forEach { r ->
-          FilterChip(r == radius, { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick); radius = r }, { Text("$r m") }, shape = MaterialTheme.shapes.medium)
-        }
-      }
-      Text("300 m covers a mall and its car park. 100 m won't go off next door.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }
 
@@ -509,7 +500,7 @@ fun PlaceEditor(data: Data, id: Int?, incoming: MapsShare?, onIncomingConsumed: 
           if (saved) return@SaveButton
           saved = true
           val placeId = id ?: data.newId()
-          Store.update(context) { it.upsert(Place(placeId, name.trim(), spots, radius)) }
+          Store.update(context) { it.upsert(Place(placeId, name.trim(), spots)) }
           onSaved(placeId)
         },
         modifier = Modifier.weight(1f),
@@ -527,10 +518,7 @@ fun PlaceEditor(data: Data, id: Int?, incoming: MapsShare?, onIncomingConsumed: 
             Column(Modifier.animateContentSize(tween(Motion.LIST, easing = Motion.EaseUi))) {
               val waitingHere = data.reminders.filter { it.placeId == existing.id }
               if (waitingHere.isEmpty()) Text("Nothing yet. Add the first thing.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-              PlaceChecklist(existing.id, existing.name, waitingHere, onDone = { r ->
-                Notifications.cancel(context, existing.id)
-                Store.update(context) { it.complete(r.id, java.time.Instant.now(), java.time.ZoneId.systemDefault()) }
-              }, onAllDone = null)
+              PlaceChecklist(existing.id, existing.name, waitingHere)
             }
           }
         }
@@ -556,7 +544,7 @@ fun PlaceEditor(data: Data, id: Int?, incoming: MapsShare?, onIncomingConsumed: 
       },
       onYes = {
         confirmDelete = false
-        deletePlace(context, data, existing.id)
+        deletePlace(context, existing.id)
         onClose()
       },
       onNo = { confirmDelete = false },
@@ -565,9 +553,9 @@ fun PlaceEditor(data: Data, id: Int?, incoming: MapsShare?, onIncomingConsumed: 
   if (confirmDiscard) ConfirmDiscard(onDiscard = { confirmDiscard = false; onClose() }, onKeep = { confirmDiscard = false })
 }
 
-/** The place and its reminders, with their notifications: a stale Done must not reach a later reminder. */
-private fun deletePlace(context: Context, data: Data, id: Int) {
-  data.reminders.filter { it.placeId == id }.forEach { Notifications.cancel(context, it.id) }
+/** The place and its reminders, with its notification (the place's id), which would list things gone. */
+private fun deletePlace(context: Context, id: Int) {
+  Notifications.cancel(context, id)
   Store.update(context) { it.removePlace(id) }
 }
 

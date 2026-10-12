@@ -83,8 +83,8 @@ class MainActivity : ComponentActivity() {
     super.onResume()
     val hadBackground = background
     refresh()
-    // Only when something was wrong or was just fixed: re-registering restarts every dwell in progress,
-    // so opening the app at the shop would otherwise cancel that visit's reminder.
+    // Only when something was wrong or was just fixed: a re-registered fence doesn't fire while you're
+    // inside it, so opening the app on the way into the shop would otherwise cancel that visit's reminder.
     if (PlaceWatch.problem.value != null || PlaceWatch.needsResync(this) || (background && !hadBackground)) PlaceWatch.resync(this, Store.data.value)
   }
 

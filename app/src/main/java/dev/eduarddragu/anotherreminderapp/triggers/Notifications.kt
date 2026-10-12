@@ -19,8 +19,6 @@ import dev.eduarddragu.anotherreminderapp.domain.Reminder
 import kotlinx.serialization.builtins.ListSerializer
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import kotlinx.serialization.json.Json
 
 object Notifications {
@@ -37,8 +35,8 @@ object Notifications {
     context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED && NotificationManagerCompat.from(context).areNotificationsEnabled()
 
   /**
-   * One notification per reminder (its id), with Done. Showing it again replaces it. The small icon says
-   * which kind it is; the place's name or the repeat rides along as the sub text.
+   * A time reminder's notification (its id), with Done. Showing it again replaces it. The repeat rides
+   * along as the sub text. Place reminders have one per place: [showPlace].
    */
   fun show(context: Context, reminder: Reminder, title: String, subText: String?) {
     if (!enabled(context)) return
@@ -46,7 +44,7 @@ object Notifications {
     val done = doneIntent(context, reminder.id, listOf(reminder.id))
     val notification =
       NotificationCompat.Builder(context, CHANNEL)
-        .setSmallIcon(if (reminder.placeId != null) R.drawable.ic_pin else R.drawable.ic_clock)
+        .setSmallIcon(R.drawable.ic_clock)
         .setColor(context.getColor(R.color.accent))
         .setSubText(subText)
         .apply { reminder.at?.let { setWhen(it).setShowWhen(true) } }
@@ -108,7 +106,7 @@ object Notifications {
         Intent(context, DoneReceiver::class.java).setAction(ACTION_UNDO).putExtra(Alarms.EXTRA_ID, notificationId).putExtra(EXTRA_BEFORE, Json.encodeToString(ListSerializer(Reminder.serializer()), before)),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
       )
-    val title = back?.let { "Done. Back on ${Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))}." } ?: if (before.size > 1) "All done. Nicely." else "Done."
+    val title = back?.let { Copy.backOn(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDateTime()) } ?: if (before.size > 1) "All done. Nicely." else "Done."
     val notification =
       NotificationCompat.Builder(context, CHANNEL)
         .setSmallIcon(R.drawable.ic_check)
@@ -133,12 +131,10 @@ class DoneReceiver : BroadcastReceiver() {
     if (intent.action == Notifications.ACTION_UNDO) {
       Notifications.cancel(context, notificationId)
       val before = intent.getStringExtra(Notifications.EXTRA_BEFORE)?.let { runCatching { Json.decodeFromString(ListSerializer(Reminder.serializer()), it) }.getOrNull() } ?: return
-      // Not into a place deleted since.
-      Store.update(context) { d -> before.filter { it.placeId == null || d.place(it.placeId) != null }.fold(d) { acc, r -> acc.upsert(r) } }
+      Store.update(context) { it.restore(before) }
       return
     }
-    // Older notifications carry only their reminder's id.
-    val ids = intent.getIntArrayExtra(Notifications.EXTRA_IDS)?.toList() ?: listOf(notificationId)
+    val ids = intent.getIntArrayExtra(Notifications.EXTRA_IDS)?.toList() ?: return
     val before = ids.mapNotNull(Store.data.value::reminder)
     if (before.isEmpty()) return Notifications.cancel(context, notificationId)
     Store.update(context) { d -> ids.fold(d) { acc, id -> acc.complete(id, Instant.now(), ZoneId.systemDefault()) } }

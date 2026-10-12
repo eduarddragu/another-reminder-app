@@ -14,11 +14,10 @@ data class Spot(val lat: Double, val lng: Double, val label: String = "") {
 
 /** A kind of place ("Esselunga") with every spot it can be: one geofence per spot. */
 @Serializable
-data class Place(val id: Int, val name: String, val spots: List<Spot> = emptyList(), val radius: Int = DEFAULT_RADIUS) {
+data class Place(val id: Int, val name: String, val spots: List<Spot> = emptyList()) {
   companion object {
-    /** Google's advice: 100 m or more, for the accuracy of Wi-Fi positioning. */
-    const val DEFAULT_RADIUS = 150
-    val RADII = listOf(100, 150, 300)
+    /** Every spot's fence. Indoors Play services often has only cell fixes (±200 m): smaller fences missed visits. */
+    const val RADIUS = 300
   }
 }
 
@@ -81,6 +80,9 @@ data class Data(val places: List<Place> = emptyList(), val reminders: List<Remin
 
   /** Places in the order of [ids] (the order dragged on the places list); any not named keep their place at the end. */
   fun reorderPlaces(ids: List<Int>) = copy(places = ids.mapNotNull(::place) + places.filter { it.id !in ids })
+
+  /** Undo: [before] as it was, except reminders whose place was deleted since: they could never fire. */
+  fun restore(before: List<Reminder>) = before.filter { it.placeId == null || place(it.placeId) != null }.fold(this) { acc, r -> acc.upsert(r) }
 
   fun removeReminder(id: Int) = copy(reminders = reminders.filter { it.id != id })
 
