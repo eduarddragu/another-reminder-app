@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import dev.eduarddragu.anotherreminderapp.R
 import dev.eduarddragu.anotherreminderapp.data.Store
 import dev.eduarddragu.anotherreminderapp.domain.Checklist
+import java.time.ZoneId
+import java.time.Instant
 import dev.eduarddragu.anotherreminderapp.domain.Reminder
 import dev.eduarddragu.anotherreminderapp.triggers.Notifications
 import dev.eduarddragu.anotherreminderapp.ui.components.TextAction
@@ -65,15 +67,28 @@ import dev.eduarddragu.anotherreminderapp.ui.components.touchTarget
  * focus (a tap elsewhere) or the keyboard goes down, keeping what was typed.
  */
 @Composable
-fun PlaceChecklist(placeId: Int, placeName: String, reminders: List<Reminder>, onDone: (Reminder) -> Unit, onAllDone: (() -> Unit)?, onFieldOpen: (Boolean) -> Unit = {}) {
+fun PlaceChecklist(placeId: Int, placeName: String, reminders: List<Reminder>, onDone: ((Reminder) -> Unit)? = null, onAllDone: (() -> Unit)? = null, onFieldOpen: (Boolean) -> Unit = {}, startAdding: Boolean = false) {
   val context = LocalContext.current
+  // By default a thing done goes, and so does the place's notification, which lists it. Home adds an Undo.
+  val done = onDone ?: { r ->
+    Notifications.cancel(context, placeId)
+    Store.update(context) { it.complete(r.id, Instant.now(), ZoneId.systemDefault()) }
+  }
   val haptics = LocalHapticFeedback.current
   val colors = MaterialTheme.colorScheme
-  var adding by rememberSaveable { mutableStateOf(false) }
+  // [startAdding]: a new reminder at a place opens straight on a line to write, keyboard up.
+  var adding by rememberSaveable { mutableStateOf(startAdding) }
   var editing by rememberSaveable { mutableStateOf<Int?>(null) }
   var draft by rememberSaveable { mutableStateOf("") }
   // Told to the card, so a tap on it while a field is open only closes the field.
   LaunchedEffect(adding, editing) { onFieldOpen(adding || editing != null) }
+  // The thing being edited went (its check, a notification's Done): its field may never report closing.
+  LaunchedEffect(reminders) {
+    if (editing != null && reminders.none { it.id == editing }) {
+      editing = null
+      draft = ""
+    }
+  }
 
   fun add() {
     val text = draft.trim()
@@ -94,7 +109,7 @@ fun PlaceChecklist(placeId: Int, placeName: String, reminders: List<Reminder>, o
     when (edit) {
       Checklist.Edit.KEEP -> Unit
       // Emptied: it goes, as a check would.
-      Checklist.Edit.REMOVE -> onDone(reminder)
+      Checklist.Edit.REMOVE -> done(reminder)
       Checklist.Edit.RENAME -> {
         // Its notification would show the old text.
         Notifications.cancel(context, placeId)
@@ -129,7 +144,7 @@ fun PlaceChecklist(placeId: Int, placeName: String, reminders: List<Reminder>, o
               .touchTarget(
                 Modifier.clickable(onClickLabel = "Done: ${reminder.text}", role = Role.Checkbox) {
                   haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                  onDone(reminder)
+                  done(reminder)
                 }
               )
               .border(1.5.dp, colors.primary, CircleShape)

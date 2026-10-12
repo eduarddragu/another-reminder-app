@@ -79,6 +79,9 @@ import dev.eduarddragu.anotherreminderapp.data.Store
 import dev.eduarddragu.anotherreminderapp.domain.Data
 import dev.eduarddragu.anotherreminderapp.domain.Reminder
 import dev.eduarddragu.anotherreminderapp.domain.Copy
+import dev.eduarddragu.anotherreminderapp.ui.components.PressCard
+import androidx.compose.animation.animateContentSize
+import androidx.compose.ui.platform.LocalFocusManager
 import dev.eduarddragu.anotherreminderapp.domain.Repeat
 import dev.eduarddragu.anotherreminderapp.domain.RepeatUnit
 import dev.eduarddragu.anotherreminderapp.domain.nextRepeat
@@ -146,18 +149,29 @@ fun ReminderEditor(data: Data, id: Int?, pickedPlace: Int?, onPickedConsumed: ()
   fun tick() = haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
   val arrival = rememberArrival(5)
   val place = data.place(placeId)
+  // A new reminder at a place is a line on that place's list, written right here, one per Enter: no free text, no Save.
+  val placeList = atPlace && existing == null
+  val waiting = place?.let { p -> data.reminders.filter { it.placeId == p.id } }.orEmpty()
+  val focus = LocalFocusManager.current
 
   Screen(
     bottomBar = {
       if (existing != null) {
         TextAction("Delete", { confirmDelete = true }, color = MaterialTheme.colorScheme.onSurfaceVariant, icon = R.drawable.ic_trash)
       }
-      SaveButton(
+      if (placeList) SaveButton(enabled = true, onClick = {
+        // Closes an open line first, which keeps what was typed on it; text written under "At a time" asks first.
+        focus.clearFocus()
+        if (dirty) confirmDiscard = true else onClose()
+      }, modifier = Modifier.weight(1f), label = "Done")
+      else SaveButton(
         enabled = valid,
         onClick = {
           // Once: the screen is still tappable while it slides away, and a second tap would save a twin.
           if (saved) return@SaveButton
           saved = true
+          // A notification already out has the old time and its own Done, which would end the moved reminder.
+          if (existing != null && !unchangedTime) Notifications.cancel(context, existing.id)
           Store.update(context) { d -> d.upsert(Reminder(id ?: d.newId(), text.trim(), placeId.takeIf { atPlace }, effectiveAt.takeIf { !atPlace }, fired = unchangedTime && existing.fired, repeat = repeat.takeIf { !atPlace }, lastNudge = existing?.lastNudge.takeIf { unchangedTime })) }
           onClose()
         },
@@ -174,7 +188,7 @@ fun ReminderEditor(data: Data, id: Int?, pickedPlace: Int?, onPickedConsumed: ()
         }
       }
     }
-    item { Field(text, { text = it }, "Remember to…", Modifier.fillMaxWidth().rise(arrival[1]), minLines = 2, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)) }
+    if (!placeList) item { Field(text, { text = it }, "Remember to…", Modifier.fillMaxWidth().rise(arrival[1]), minLines = 2, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)) }
     item {
       Row(Modifier.padding(top = 24.dp).rise(arrival[2]).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         KindTile(atPlace, R.drawable.ic_pin, "At a place", "Every visit", Modifier.weight(1f)) { tick(); atPlace = true }
@@ -197,6 +211,16 @@ fun ReminderEditor(data: Data, id: Int?, pickedPlace: Int?, onPickedConsumed: ()
             }
             if (place == null && data.places.isNotEmpty()) Text("Pick one.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             TextAction("New place", onNewPlace, icon = R.drawable.ic_plus)
+            if (placeList && place != null) {
+              Spacer(Modifier.height(8.dp))
+              SectionLabel("Things to do here")
+              PressCard(onClick = null, onClickLabel = null) {
+                Column(Modifier.animateContentSize(tween(Motion.LIST, easing = Motion.EaseUi))) {
+                  if (waiting.isEmpty()) Text("Nothing yet. Add the first thing.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                  PlaceChecklist(place.id, place.name, waiting, startAdding = true)
+                }
+              }
+            }
           } else {
             SectionLabel("When")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -240,7 +264,8 @@ fun ReminderEditor(data: Data, id: Int?, pickedPlace: Int?, onPickedConsumed: ()
                   keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                   supportingText = if (repeat == null) ({ Text("1 to ${Repeat.MAX}") }) else null,
                 )
-                FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Centred on the field's 56dp box (8dp under its label): a chip lays out 48dp for its touch target.
+                FlowRow(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                   RepeatUnit.entries.forEach { u ->
                     val word = u.name.lowercase().let { if (count == "1") it.removeSuffix("s") else it }
                     FilterChip(u == unit, { tick(); unit = u }, { Text(word) }, shape = MaterialTheme.shapes.medium)
@@ -265,7 +290,7 @@ fun ReminderEditor(data: Data, id: Int?, pickedPlace: Int?, onPickedConsumed: ()
             Spacer(Modifier.width(8.dp))
             Text(title, style = MaterialTheme.typography.titleMedium)
           }
-          Text(text.ifBlank { "Remember to…" }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text((if (placeList) waiting.takeIf { it.isNotEmpty() }?.let { Copy.placeItems(it.map(Reminder::text)) } else text.ifBlank { null }) ?: "Remember to…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }
     }

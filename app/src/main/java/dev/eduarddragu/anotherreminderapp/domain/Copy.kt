@@ -89,6 +89,9 @@ object Copy {
   private val DATE = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
   private val DATE_YEAR = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
+  /** After Done on a repeating reminder, in the app and in the notification. */
+  fun backOn(at: LocalDateTime): String = "Done. Back on ${at.format(DATE_YEAR)}."
+
   /** "Every day", "Every 2 weeks", "Every year". */
   fun repeatLabel(repeat: Repeat): String {
     val unit = repeat.unit.name.lowercase()

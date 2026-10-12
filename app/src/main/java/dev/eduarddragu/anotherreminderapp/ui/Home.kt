@@ -39,6 +39,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -158,12 +159,11 @@ fun HomeScreen(data: Data, problems: List<Problem>, onOpen: (Int?) -> Unit, onPl
     reminder.placeId?.let { Notifications.cancel(context, it) }
     Store.update(context) { it.complete(reminder.id, Instant.now(), zone) }
     val back = Store.data.value.reminder(reminder.id)?.at
-    val message = if (back != null) "Done. Back on ${local(back, zone).format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))}." else "Done: ${reminder.text.trimEnd('.')}."
+    val message = if (back != null) Copy.backOn(local(back, zone)) else "Done: ${reminder.text.trimEnd('.')}."
     scope.launch {
       snackbar.currentSnackbarData?.dismiss()
       if (snackbar.showSnackbar(message, actionLabel = "Undo", duration = SnackbarDuration.Long) == SnackbarResult.ActionPerformed) {
-        // A place deleted meanwhile would leave the reminder unable to fire.
-        Store.update(context) { d -> if (reminder.placeId == null || d.place(reminder.placeId) != null) d.upsert(reminder) else d }
+        Store.update(context) { it.restore(listOf(reminder)) }
       }
     }
   }
@@ -174,7 +174,7 @@ fun HomeScreen(data: Data, problems: List<Problem>, onOpen: (Int?) -> Unit, onPl
     scope.launch {
       snackbar.currentSnackbarData?.dismiss()
       if (snackbar.showSnackbar("All done: ${Copy.placeItems(reminders.map { it.text })}", actionLabel = "Undo", duration = SnackbarDuration.Long) == SnackbarResult.ActionPerformed) {
-        Store.update(context) { d -> reminders.filter { it.placeId == null || d.place(it.placeId) != null }.fold(d) { acc, r -> acc.upsert(r) } }
+        Store.update(context) { it.restore(reminders) }
       }
     }
   }
@@ -278,7 +278,11 @@ fun HomeScreen(data: Data, problems: List<Problem>, onOpen: (Int?) -> Unit, onPl
         }
       }
     }
-    SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 88.dp))
+    // In the theme, like a card: Material's inverted snackbar is a white slab at night.
+    SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 88.dp)) { data ->
+      val colors = MaterialTheme.colorScheme
+      Snackbar(data, Modifier.border(cardOutline(), MaterialTheme.shapes.medium), shape = MaterialTheme.shapes.medium, containerColor = colors.surfaceContainerLow, contentColor = colors.onSurface, actionColor = colors.primary)
+    }
   }
 }
 

@@ -41,31 +41,12 @@ object Search {
     return emptyList()
   }
 
-  /** Nominatim's viewbox only leans results towards an area; it doesn't sort them. */
+  /** Nominatim's viewbox only leans results towards an area; it doesn't sort them. A degree east is shorter than one north. */
   private fun nearestFirst(found: List<Found>, near: Spot?): List<Found> =
-    if (near == null) found else found.sortedBy { (it.spot.lat - near.lat).let { d -> d * d } + (it.spot.lng - near.lng).let { d -> d * d } }
+    if (near == null) found else found.sortedBy { (it.spot.lat - near.lat).let { d -> d * d } + ((it.spot.lng - near.lng) * Math.cos(Math.toRadians(near.lat))).let { d -> d * d } }
 
   /** What's at a spot, for one saved as bare coordinates: "Esselunga · Viale Piave 38, Milano", or just the address. */
-  suspend fun label(spot: Spot): String? =
-    gate.withLock {
-      delay((last + 1_100 - System.currentTimeMillis()).coerceAtLeast(0))
-      last = System.currentTimeMillis()
-      withContext(Dispatchers.IO) {
-        runCatching {
-            val connection = URL("https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${spot.lat}&lon=${spot.lng}").openConnection() as HttpURLConnection
-            connection.setRequestProperty("User-Agent", Tiles.USER_AGENT)
-            connection.connectTimeout = 8_000
-            connection.readTimeout = 8_000
-            try {
-              connection.inputStream.use { labelOf(it.readBytes().decodeToString()) }
-            } finally {
-              connection.disconnect()
-            }
-          }
-          .onFailure { Log.w("Search", "reverse failed", it) }
-          .getOrNull()
-      }
-    }
+  suspend fun label(spot: Spot): String? = get("reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${spot.lat}&lon=${spot.lng}", ::labelOf)
 
   /** A reverse result as a spot's label: the name only when the place has one of its own. */
   fun labelOf(json: String): String? =
@@ -74,25 +55,29 @@ object Search {
   private val gate = Mutex()
   private var last = 0L
 
-  private suspend fun request(query: String, near: Spot?, span: Double, bounded: Boolean, limit: Int): List<Found>? =
+  private suspend fun request(query: String, near: Spot?, span: Double, bounded: Boolean, limit: Int): List<Found>? {
+    val box = near?.let { "&viewbox=${it.lng - span},${it.lat + span},${it.lng + span},${it.lat - span}" + if (bounded) "&bounded=1" else "" }.orEmpty()
+    return get("search?format=jsonv2&addressdetails=1&limit=$limit$box&q=${URLEncoder.encode(query, "UTF-8")}", ::parse)
+  }
+
+  /** One Nominatim call, at most one a second ([gate]); null when it or [read] fails. */
+  private suspend fun <T> get(path: String, read: (String) -> T): T? =
     gate.withLock {
       delay((last + 1_100 - System.currentTimeMillis()).coerceAtLeast(0))
       last = System.currentTimeMillis()
       withContext(Dispatchers.IO) {
-        val box = near?.let { "&viewbox=${it.lng - span},${it.lat + span},${it.lng + span},${it.lat - span}" + if (bounded) "&bounded=1" else "" }.orEmpty()
-        val url = "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=$limit$box&q=${URLEncoder.encode(query, "UTF-8")}"
         runCatching {
-            val connection = URL(url).openConnection() as HttpURLConnection
+            val connection = URL("https://nominatim.openstreetmap.org/$path").openConnection() as HttpURLConnection
             connection.setRequestProperty("User-Agent", Tiles.USER_AGENT)
             connection.connectTimeout = 8_000
             connection.readTimeout = 8_000
             try {
-              connection.inputStream.use { parse(it.readBytes().decodeToString()) }
+              connection.inputStream.use { read(it.readBytes().decodeToString()) }
             } finally {
               connection.disconnect()
             }
           }
-          .onFailure { Log.w("Search", "search failed", it) }
+          .onFailure { Log.w("Search", "nominatim failed: ${path.substringBefore('?')}", it) }
           .getOrNull()
       }
     }

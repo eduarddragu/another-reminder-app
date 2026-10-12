@@ -18,14 +18,12 @@ import dev.eduarddragu.anotherreminderapp.data.Store
 import dev.eduarddragu.anotherreminderapp.domain.Copy
 import dev.eduarddragu.anotherreminderapp.domain.Data
 import dev.eduarddragu.anotherreminderapp.domain.Fences
+import dev.eduarddragu.anotherreminderapp.domain.Place
 import androidx.core.content.edit
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** Keeps Play services' geofences in line with [Fences.plan]. */
 object PlaceWatch {
-  /** Stopping for this long inside a spot counts as being there: driving past doesn't. */
-  private const val LOITER_MS = 2 * 60_000
-
   /** Why place reminders can't fire right now, for Home. Null when they can (or none are waiting). */
   val problem = MutableStateFlow<String?>(null)
 
@@ -42,8 +40,8 @@ object PlaceWatch {
   fun markNeeded(context: Context) = prefs(context).edit { putBoolean(KEY_NEEDED, true) }
 
   /**
-   * Registers every fence again from scratch: after a reboot, an app update, or while [needsResync]. Any
-   * dwell in progress restarts, so it never runs just because the app opened. [done] runs once Play
+   * Registers every fence again from scratch: after a reboot, an app update, or while [needsResync]. A
+   * fence you're inside won't fire until you leave and come back, so it never runs just because the app opened. [done] runs once Play
    * services has answered, for a receiver holding its broadcast open.
    */
   fun resync(context: Context, data: Data, done: () -> Unit = {}) {
@@ -54,16 +52,13 @@ object PlaceWatch {
   }
 
   /**
-   * Moves the registered fences from [old]'s plan to [new]'s, touching only those that changed: replacing
-   * a fence restarts its dwell, so adding a reminder at the shop you're standing in must leave it alone.
+   * Moves the registered fences from [old]'s plan to [new]'s, touching only those that changed: a replaced
+   * fence doesn't fire while you're inside it, so adding a reminder at the shop you're standing in must leave it alone.
    */
   fun update(context: Context, old: Data, new: Data) {
-    val before = Fences.plan(old).toSet()
-    val after = Fences.plan(new).toSet()
-    val gone = (before - after).map { it.requestId } - after.map { it.requestId }.toSet()
-    val client = LocationServices.getGeofencingClient(context)
-    if (gone.isNotEmpty()) client.removeGeofences(gone)
-    add(context, (after - before).toList(), full = false)
+    val (gone, added) = Fences.diff(old, new)
+    if (gone.isNotEmpty()) LocationServices.getGeofencingClient(context).removeGeofences(gone)
+    add(context, added, full = false)
   }
 
   /** [full]: the whole plan after a remove-all, so success means Play services holds exactly the plan. */
@@ -88,10 +83,10 @@ object PlaceWatch {
           fences.map {
             Geofence.Builder()
               .setRequestId(it.requestId)
-              .setCircularRegion(it.spot.lat, it.spot.lng, it.radius.toFloat())
+              .setCircularRegion(it.spot.lat, it.spot.lng, Place.RADIUS.toFloat())
               .setExpirationDuration(Geofence.NEVER_EXPIRE)
-              .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_DWELL)
-              .setLoiteringDelay(LOITER_MS)
+              // ENTER, not DWELL: indoors Play services often has only cell fixes (±200 m), too coarse to see two minutes inside.
+              .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER)
               .build()
           }
         )
@@ -133,10 +128,22 @@ class GeofenceReceiver : BroadcastReceiver() {
       PlaceWatch.problem.value = PlaceWatch.describe(event.errorCode)
       return
     }
-    if (event.geofenceTransition != Geofence.GEOFENCE_TRANSITION_DWELL) return
+    if (event.geofenceTransition != Geofence.GEOFENCE_TRANSITION_ENTER) return
     val placeIds = event.triggeringGeofences.orEmpty().mapNotNull { Fences.placeId(it.requestId) }.toSet()
     val data = Store.data.value
-    // One notification per place, with everything waiting there.
-    placeIds.mapNotNull(data::place).forEach { place -> Notifications.showPlace(context, place, data.reminders.filter { it.placeId == place.id }, Copy.placeTitle(place.name, Copy.placeSeed(place.id))) }
+    val prefs = context.getSharedPreferences("system", Context.MODE_PRIVATE)
+    val now = System.currentTimeMillis()
+    // One notification per place, with everything waiting there. Coarse fixes at the edge of a fence enter it
+    // again and again: once an hour per place is enough.
+    placeIds.mapNotNull(data::place).filter { now - prefs.getLong("notified_${it.id}", 0) >= QUIET_MS }.forEach { place ->
+      val waiting = data.reminders.filter { it.placeId == place.id }
+      if (waiting.isEmpty()) return@forEach
+      Notifications.showPlace(context, place, waiting, Copy.placeTitle(place.name, Copy.placeSeed(place.id)))
+      prefs.edit { putLong("notified_${place.id}", now) }
+    }
+  }
+
+  private companion object {
+    const val QUIET_MS = 60 * 60_000L
   }
 }

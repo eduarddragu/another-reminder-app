@@ -51,7 +51,8 @@ fun Screen(bottomBar: @Composable RowScope.() -> Unit, state: LazyListState = re
     // cover the card being written in. Editors keep it, Save is there.
     if (barWithKeyboard || !WindowInsets.isImeVisible) {
       Row(
-        Modifier.fillMaxWidth().navigationBarsPadding().imePadding().gutter().padding(vertical = 12.dp),
+        // Without the keyboard's padding on Home: for the frame before the bar goes, it would ride up over the card.
+        Modifier.fillMaxWidth().navigationBarsPadding().then(if (barWithKeyboard) Modifier.imePadding() else Modifier).gutter().padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
         content = bottomBar,

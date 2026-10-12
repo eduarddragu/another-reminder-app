@@ -70,12 +70,25 @@ class DomainTest {
 
   @Test
   fun fencesOnlyForPlacesWithReminders() {
-    val esselunga = Place(1, "Esselunga", listOf(Spot(45.0, 9.0), Spot(45.1, 9.1)), radius = 100)
+    val esselunga = Place(1, "Esselunga", listOf(Spot(45.0, 9.0), Spot(45.1, 9.1)))
     val gym = Place(2, "Gym", listOf(Spot(46.0, 9.0)))
     val data = Data(listOf(esselunga, gym), listOf(Reminder(3, "milk", placeId = 1), Reminder(4, "call mum", at = 0)))
     assertEquals(listOf("1:0", "1:1"), Fences.plan(data).map { it.requestId })
-    assertEquals(100, Fences.plan(data).first().radius)
     assertEquals(1, Fences.placeId("1:1"))
+  }
+
+  @Test
+  fun fenceUpdatesTouchOnlyWhatChanged() {
+    val shop = Place(1, "Esselunga", listOf(Spot(45.0, 9.0), Spot(45.1, 9.1)))
+    val one = Data(listOf(shop), listOf(Reminder(2, "milk", placeId = 1)))
+    // Another thing for a place already watched: its fences stay as they are, or a visit in progress is missed.
+    assertEquals(emptyList<String>() to emptyList<Fences.Fence>(), Fences.diff(one, one.upsert(Reminder(3, "bread", placeId = 1))))
+    // A spot gone: the last request id goes, the first is replaced by the spot that moved into it.
+    val (gone, added) = Fences.diff(one, one.upsert(shop.copy(spots = listOf(Spot(45.1, 9.1)))))
+    assertEquals(listOf("1:1"), gone)
+    assertEquals(listOf("1:0"), added.map { it.requestId })
+    // The last thing done: every fence of the place goes.
+    assertEquals(listOf("1:0", "1:1") to emptyList<Fences.Fence>(), Fences.diff(one, one.removeReminder(2)))
   }
 
   @Test
@@ -91,6 +104,15 @@ class DomainTest {
     assertEquals(listOf(5), data.removePlace(1).reminders.map { it.id })
     assertEquals("z", data.upsert(Reminder(5, "z", at = 0)).reminder(5)?.text)
     assertEquals(2, data.upsert(Reminder(5, "z", at = 0)).reminders.size)
+  }
+
+  @Test
+  fun undoSkipsRemindersOfADeletedPlace() {
+    val before = listOf(Reminder(2, "x", placeId = 1), Reminder(5, "y", at = 0))
+    val data = Data(listOf(Place(1, "A")), before)
+    val done = before.fold(data) { acc, r -> acc.complete(r.id, java.time.Instant.EPOCH, java.time.ZoneOffset.UTC) }
+    assertEquals(before, done.restore(before).reminders)
+    assertEquals(listOf(5), done.removePlace(1).restore(before).reminders.map { it.id })
   }
 
   @Test
@@ -154,11 +176,11 @@ class DomainTest {
     // A place missing from the dragged order keeps its spot at the end, never lost.
     assertEquals(listOf(3, 1, 2), data.reorderPlaces(listOf(3, 1)).places.map { it.id })
     // What a phone's maps.app.goo.gl link expands to today: an address, no coordinates.
-    val expanded = "https://www.google.com/maps/place/Automobile+Club+Vicenza+ACI+Via+Tornieri,+Via+Arnaldo+Tornieri,+62,+36100+Vicenza+VI/data=!4m2!3m1!1s0x477f322085032267:0x971009d62c31f087?utm_source=mstt_1&entry=gps"
-    assertEquals("Automobile Club Vicenza ACI Via Tornieri, Via Arnaldo Tornieri, 62, 36100 Vicenza VI", MapsShare.placeName(expanded))
+    val expanded = "https://www.google.com/maps/place/Esselunga,+Viale+Piave,+38,+20129+Milano+MI/data=!4m2!3m1!1s0x0:0x0?utm_source=mstt_1&entry=gps"
+    assertEquals("Esselunga, Viale Piave, 38, 20129 Milano MI", MapsShare.placeName(expanded))
     assertNull(Coordinates.parse(expanded))
-    assertNull(MapsShare.placeName("https://maps.app.goo.gl/91jma2zHp9mWgG6M6"))
-    assertEquals(listOf("Automobile Club Vicenza ACI Via Tornieri, Via Arnaldo Tornieri, 62, 36100 Vicenza VI", "Via Arnaldo Tornieri, 62, 36100 Vicenza VI"), MapsShare.searches(MapsShare.placeName(expanded)!!))
+    assertNull(MapsShare.placeName("https://maps.app.goo.gl/AbC123"))
+    assertEquals(listOf("Esselunga, Viale Piave, 38, 20129 Milano MI", "Viale Piave, 38, 20129 Milano MI"), MapsShare.searches(MapsShare.placeName(expanded)!!))
     assertEquals(listOf("Via Roma 1"), MapsShare.searches("Via Roma 1"))
   }
 
@@ -184,6 +206,8 @@ class DomainTest {
     assertEquals(due, Nudges.next(reminder, t(6, 1, 15), zone)?.at)
     // Fired at 15:00 (late): the nudges carry on from now, not from the ones missed.
     assertEquals(t(6, 1, 17), Nudges.next(reminder.copy(fired = true, lastNudge = t(6, 1, 15)), t(6, 1, 15), zone)?.at)
+    // The evening-before heads-up delivered only after the due time: the reminder itself still comes.
+    assertEquals(due, Nudges.next(reminder.copy(lastNudge = t(5, 31, 20)), t(6, 1, 9, 30), zone)?.at)
     // A week later, it stops.
     assertNull(Nudges.next(reminder.copy(fired = true, lastNudge = t(6, 8, 9)), t(6, 8, 9, 1), zone))
     // Due in the evening: no heads-up the evening before only three hours earlier on the same day.
